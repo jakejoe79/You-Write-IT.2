@@ -1,0 +1,9 @@
+node_modules/
+*.db
+*.epub
+data/outputs/
+data/temp/
+data/chroma/
+.env
+__pycache__/
+*.pyc
