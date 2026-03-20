@@ -1,10 +1,13 @@
 const express = require('express');
+const cors = require('cors');
 const app = express();
 
-app.use(express.json());
+app.use(cors());
+app.use(express.json({ limit: '2mb' }));
 
 app.use('/api/generate', require('./routes/generate'));
 app.use('/api/export', require('./routes/export'));
+app.use('/api/stream', require('./routes/stream'));
 app.use('/health', require('./routes/health'));
 
 module.exports = app;
