@@ -9,7 +9,7 @@ const { ContextWindow } = require('../services/core/memoryCompressor');
 const { getVoiceBlock } = require('../characters/voiceProfiles');
 const { generateAndValidate } = require('../services/agents/sceneValidator');
 const { checkContinuity } = require('../services/agents/continuity');
-const { createSession, addScene, updateSessionState, getSession, getScenes, updateSceneContent, getChapter, getChapterState, getChapterId, addRevision, getChapters } = require('../db/sqlite');
+const { createSession, addScene, updateSessionState, getSession, getScenes, updateSceneContent, getChapter, getChapterState, getChapterId, addRevision, getRevisions, getChapters } = require('../db/sqlite');
 const { LLMChain } = require('langchain/chains');
 const { PromptTemplate } = require('@langchain/core/prompts');
 const { llm } = require('../services/core/llm');
@@ -766,3 +766,67 @@ router.post('/session/:id/scene/:index', async (req, res) => {
 });
 
 module.exports = router;
+
+// ============================================
+// SYNC STORY ENDPOINT (for non-streaming clients)
+// ============================================
+
+router.post('/story/sync', async (req, res) => {
+  const { input, chapters = 5, genre = null, authorStyle = null, protagonist = null, sessionId = null } = req.body;
+
+  try {
+    const id = sessionId || await createSession({
+      mode: 'story', title: input?.slice(0, 50), genre, authorStyle, protagonist,
+      state: { characters: {}, inventory: [], choices_made: [], world_rules: [] },
+    });
+
+    const genreProfile = getGenre(genre);
+    const genreRules = genre ? require('../config/genreProfiles').getGenreConstraints(genre) : '';
+    const styleGuidelines = authorStyle ? getStyleGuidelines(authorStyle) : '';
+    const constraints = buildConstraintBlock(genre ? genreProfile.hardConstraints : []);
+    const voice = getVoiceBlock(protagonist);
+    const memory = new ContextWindow({ rawWindow: 3 });
+    let emotionState = applyGenreBias(emptyEmotionState(), genreProfile.emotionBias || {});
+    const rawChapters = [];
+    const chapterAccumulator = new ChapterAccumulator({ minWords: 3000, maxWords: 5000 });
+
+    for (let chapterNum = 0; chapterNum < chapters; chapterNum++) {
+      const variation = getVariation(chapterNum);
+      emotionState = updateEmotion(emotionState, variation.label);
+      const emotion = describeEmotion(emotionState);
+      const context = memory.render();
+
+      const { text, validation } = await generateAndValidate(sceneChain, {
+        sceneNum: chapterNum + 1, totalScenes: chapters, context, input,
+        constraints, voice, genreRules, styleGuidelines,
+        variation: variation.instruction, emotion,
+      }, variation.label);
+
+      const chapter = chapterAccumulator.addChunk(text);
+
+      if (chapter) {
+        rawChapters.push(chapter.content);
+        await memory.add(chapter.content);
+        await addScene(id, chapter.index, chapter.content, emotionState, validation);
+      }
+    }
+
+    const finalChapter = chapterAccumulator.forceFlush();
+    if (finalChapter && finalChapter.wordCount > 0) {
+      rawChapters.push(finalChapter.content);
+      await memory.add(finalChapter.content);
+      await addScene(id, finalChapter.index, finalChapter.content, emotionState, '');
+    }
+
+    const { corrected, report } = await checkContinuity(rawChapters);
+    await updateSessionState(id, { protagonist: emotionState.protagonist });
+
+    res.json({ 
+      sessionId: id, 
+      chapters: rawChapters, 
+      continuityReport: report 
+    });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});

@@ -1,6 +1,7 @@
 const pipeline = require('../services/core/pipeline');
 const { validators, CONTRACT_VERSION } = require('../services/core/contracts');
 const { ValidationError, serializeError } = require('../services/core/errors');
+const { generationQueue } = require('../queue');
 
 async function generate(req, res) {
   try {
@@ -8,13 +9,19 @@ async function generate(req, res) {
     validators.validateGenerateStoryRequest(req.body);
 
     const { mode, input, options } = req.body;
-    const result = await pipeline.run(mode, input, options);
     
-    const response = { result };
-    // HARD ENFORCEMENT: throws if invalid
-    validators.validateGenerateStoryResponse(response);
+    // Add job to queue for async processing
+    const job = await generationQueue.add('generate', {
+      mode,
+      input,
+      options,
+    });
     
-    res.json(response);
+    res.json({ 
+      jobId: job.id,
+      status: 'queued',
+      message: 'Generation job queued for processing',
+    });
   } catch (err) {
     res.status(err.status || 500).json(serializeError(err));
   }

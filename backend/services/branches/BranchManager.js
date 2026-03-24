@@ -1,7 +1,8 @@
 // BranchManager - orchestrates branch generation and state management
 // Handles branch creation, state snapshots, and recompute operations
 
-const { getBranch, getBranchTree, getBranchLineage, getCheckpointState } = require('../../db/sqlite');
+const { getBranch, getBranchTree, getBranchLineage, getCheckpointState, createBranch } = require('../../db/sqlite');
+const NodeStore = require('./NodeStore');
 
 class BranchManager {
   constructor() {
@@ -28,6 +29,14 @@ class BranchManager {
     });
     
     return branchId;
+  }
+
+  async createVersionNode(parentBranchId, chapters) {
+    return NodeStore.createNode(parentBranchId, chapters);
+  }
+
+  async getVersionNode(nodeId) {
+    return NodeStore.getNode(nodeId);
   }
 
   async getBranchState(branchId) {
