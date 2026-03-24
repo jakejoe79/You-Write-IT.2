@@ -7,3 +7,11 @@ data/chroma/
 .env
 __pycache__/
 *.pyc
+backend/db/migrations/
+data/outputs/
+data/temp/
+data/chroma/
+*.log
+coverage/
+.cache/
+.vscode/
