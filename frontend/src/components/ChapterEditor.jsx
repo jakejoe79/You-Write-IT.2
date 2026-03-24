@@ -98,8 +98,19 @@ export default function ChapterEditor({
       }));
   }, [chapter.emotion]);
 
+  // Status badge configuration
+  const statusConfig = {
+    generated: { label: 'Generated', class: 'status-generated', icon: '✓' },
+    edited: { label: 'Edited', class: 'status-edited', icon: '✎' },
+    stale: { label: 'Stale', class: 'status-stale', icon: '⚠️' },
+    recomputing: { class: 'status-recomputing', icon: '⟳' },
+    error: { label: 'Error', class: 'status-error', icon: '❌' },
+  };
+
+  const status = statusConfig[chapter.status] || statusConfig.generated;
+
   return (
-    <div className={`chapter-editor ${editing ? 'editing' : ''} ${chapter.status === 'edited' ? 'edited' : ''}`}>
+    <div className={`chapter-editor ${editing ? 'editing' : ''} ${chapter.status ? 'status-' + chapter.status : ''}`}>
       {/* Chapter Header */}
       <div className="chapter-header">
         <div className="chapter-title">
@@ -110,8 +121,10 @@ export default function ChapterEditor({
         </div>
         
         <div className="chapter-actions">
-          {chapter.status === 'edited' && (
-            <span className="edited-badge" title="This chapter has been edited">✎ Edited</span>
+          {chapter.status && chapter.status !== 'generated' && (
+            <span className={`status-badge ${status.class}`} title={`Status: ${status.label || chapter.status}`}>
+              {status.icon} {status.label || ''}
+            </span>
           )}
           
           {!editing && !readOnly && (
@@ -126,7 +139,7 @@ export default function ChapterEditor({
             </button>
           )}
           
-          {onRecompute && (
+          {onRecompute && chapter.status === 'stale' && (
             <button 
               className="btn-recompute"
               onClick={handleRecompute}
@@ -224,13 +237,28 @@ export default function ChapterEditor({
         </div>
       )}
 
-      {/* Derived tracking indicator */}
+      {/* Derived tracking indicator with impact summary */}
       {chapter.derived_from !== undefined && chapter.derived_from !== null && (
         <div className="derived-indicator">
           <span className="derived-icon">🔄</span>
           <span>Regenerated from Chapter {chapter.derived_from + 1}</span>
           {chapter.affectedChapters && (
             <span className="affected-count">{chapter.affectedChapters} chapters affected</span>
+          )}
+          {chapter.impactSummary && chapter.impactSummary.length > 0 && (
+            <div className="impact-summary">
+              {chapter.impactSummary.slice(0, 3).map((impact, i) => (
+                <div key={i} className="impact-item">
+                  {impact.type === 'character' && (
+                    <span className="impact-char">{impact.name}</span>
+                  )}
+                  {impact.type === 'inventory' && (
+                    <span className="impact-inv">{impact.name}</span>
+                  )}
+                  <span className="impact-desc">{impact.description}</span>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       )}

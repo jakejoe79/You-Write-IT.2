@@ -1,6 +1,6 @@
 // Ollama wrapper via LangChain
 const { Ollama } = require('@langchain/ollama');
-const { env } = require('../../config/env');
+const env = require('../../config/env');
 
 const llm = new Ollama({
   baseUrl: env.ollamaUrl,

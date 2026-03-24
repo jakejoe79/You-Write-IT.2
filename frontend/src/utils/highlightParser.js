@@ -1,9 +1,58 @@
 /**
  * Highlight Parser - Extracts and marks characters, emotions, and inventory from chapter content
- * Now with fuzzy matching and alias tracking for robust entity recognition
+ * Now with entity IDs, fuzzy matching, and alias tracking for robust entity recognition
  */
 
-import { JaroWinkler } from 'natural';
+// Simple Jaro-Winkler implementation (no external dependency)
+function jaroWinkler(s1, s2) {
+  if (s1 === s2) return 1.0;
+  if (!s1 || !s2 || s1.length === 0 || s2.length === 0) return 0.0;
+  
+  const len1 = s1.length;
+  const len2 = s2.length;
+  const matchDistance = Math.floor(Math.max(len1, len2) / 2) - 1;
+  
+  const s1Matches = new Array(len1).fill(false);
+  const s2Matches = new Array(len2).fill(false);
+  
+  let matches = 0;
+  let transpositions = 0;
+  
+  // Find matches
+  for (let i = 0; i < len1; i++) {
+    const start = Math.max(0, i - matchDistance);
+    const end = Math.min(i + matchDistance + 1, len2);
+    
+    for (let j = start; j < end; j++) {
+      if (s1Matches[j] || s1[i] !== s2[j]) continue;
+      s1Matches[j] = true;
+      s2Matches[i] = true;
+      matches++;
+      break;
+    }
+  }
+  
+  if (matches === 0) return 0.0;
+  
+  // Count transpositions
+  let k = 0;
+  for (let i = 0; i < len1; i++) {
+    if (!s1Matches[i]) continue;
+    while (!s2Matches[k]) k++;
+    if (s1[i] !== s2[k]) transpositions++;
+    k++;
+  }
+  
+  const jaro = (matches / len1 + matches / len2 + (matches - transpositions / 2) / matches) / 3;
+  
+  // Winkler modification
+  let prefix = 0;
+  for (let i = 0; i < 4 && i < len1 && i < len2 && s1[i] === s2[i]; i++) {
+    prefix++;
+  }
+  
+  return jaro + prefix * 0.1 * (1 - jaro);
+}
 
 // Character role colors
 export const ROLE_COLORS = {
@@ -61,6 +110,17 @@ const FALSE_POSITIVES = new Set([
   'One', 'Two', 'Three', 'Four', 'Five', 'First', 'Second', 'Third',
 ]);
 
+// Entity registry for consistent IDs across chapters
+const entityRegistry = new Map();
+let entityCounter = 0;
+
+/**
+ * Generate unique entity ID
+ */
+function generateEntityId() {
+  return `entity_${++entityCounter}_${Date.now().toString(36)}`;
+}
+
 /**
  * Get canonical name from an alias
  */
@@ -101,10 +161,10 @@ export function isSameCharacter(name1, name2) {
   
   // Jaro-Winkler similarity for fuzzy matching (threshold: 0.85)
   try {
-    const similarity = JaroWinkler(n1, n2);
+    const similarity = jaroWinkler(n1, n2);
     if (similarity >= 0.85) return true;
   } catch (e) {
-    // natural library not available, fall back to simple comparison
+    // Fall back to simple comparison
   }
   
   // Check if one contains the other (for "John" vs "Johnny")
@@ -116,7 +176,40 @@ export function isSameCharacter(name1, name2) {
 }
 
 /**
- * Extract character names from content with alias support
+ * Get or create entity with consistent ID
+ */
+function getOrCreateEntity(name, type = 'character') {
+  const canonical = getCanonicalName(name);
+  const key = `${type}:${canonical.toLowerCase()}`;
+  
+  if (entityRegistry.has(key)) {
+    return entityRegistry.get(key);
+  }
+  
+  const entity = {
+    id: generateEntityId(),
+    canonical,
+    name,
+    type,
+    aliases: CHARACTER_ALIASES[canonical] || [],
+    firstSeen: Date.now(),
+    status: 'active', // for inventory: active, lost, transferred, destroyed
+  };
+  
+  entityRegistry.set(key, entity);
+  return entity;
+}
+
+/**
+ * Reset entity registry (for new sessions)
+ */
+export function resetEntityRegistry() {
+  entityRegistry.clear();
+  entityCounter = 0;
+}
+
+/**
+ * Extract character names from content with alias support and entity IDs
  */
 export function extractCharacters(content) {
   // Match capitalized names (simple heuristic)
@@ -137,10 +230,16 @@ export function extractCharacters(content) {
     }
     
     seen.add(canonical.toLowerCase());
+    
+    // Get entity with consistent ID
+    const entity = getOrCreateEntity(name, 'character');
+    
     characters.push({
-      name: canonical,
+      id: entity.id,
+      name: entity.canonical,
       original: name,
-      aliases: CHARACTER_ALIASES[canonical] || [],
+      aliases: entity.aliases,
+      status: entity.status,
     });
   }
   
@@ -148,7 +247,7 @@ export function extractCharacters(content) {
 }
 
 /**
- * Extract inventory items from content
+ * Extract inventory items from content with entity IDs and status tracking
  */
 export function extractInventory(content) {
   const items = [];
@@ -163,17 +262,32 @@ export function extractInventory(content) {
     /([A-Z][a-z]+)'s\s+([a-z]+(?:\s+[a-z]+)*)/gi,
   ];
   
+  const seen = new Set();
+  
   for (const pattern of patterns) {
     let match;
     while ((match = pattern.exec(content)) !== null) {
       const item = match[1] || match[2];
       if (item && item.length > 2 && item.length < 30) {
-        items.push(item);
+        const normalized = item.toLowerCase();
+        if (seen.has(normalized)) continue;
+        
+        seen.add(normalized);
+        
+        // Get entity with consistent ID
+        const entity = getOrCreateEntity(item, 'inventory');
+        
+        items.push({
+          id: entity.id,
+          name: entity.canonical,
+          original: item,
+          status: entity.status, // active, lost, transferred, destroyed
+        });
       }
     }
   }
   
-  return [...new Set(items)];
+  return items;
 }
 
 /**
@@ -345,4 +459,110 @@ export function getCharacterStatus(name, content) {
     isDead: isCharacterDead(name, content),
     role: inferCharacterRole(name, content, []),
   };
+}
+
+/**
+ * Calculate rolling emotion trend across multiple chapters
+ * @param {Array} chapters - Array of chapter objects with emotion state
+ * @param {number} windowSize - Number of chapters to consider (default: 5)
+ * @returns {Object} - Trend data for each emotion
+ */
+export function calculateEmotionTrend(chapters, windowSize = 5) {
+  if (!chapters || chapters.length === 0) return {};
+  
+  const trends = {};
+  const recentChapters = chapters.slice(-windowSize);
+  
+  for (const chapter of recentChapters) {
+    if (!chapter.emotion) continue;
+    
+    const emotions = chapter.emotion.protagonist || chapter.emotion;
+    
+    for (const [emotion, value] of Object.entries(emotions)) {
+      if (!trends[emotion]) {
+        trends[emotion] = {
+          values: [],
+          trend: 'stable',
+          change: 0,
+        };
+      }
+      trends[emotion].values.push(value);
+    }
+  }
+  
+  // Calculate trend direction for each emotion
+  for (const emotion of Object.keys(trends)) {
+    const values = trends[emotion].values;
+    if (values.length < 2) {
+      trends[emotion].trend = 'stable';
+      trends[emotion].change = 0;
+      continue;
+    }
+    
+    const firstHalf = values.slice(0, Math.floor(values.length / 2));
+    const secondHalf = values.slice(Math.floor(values.length / 2));
+    
+    const firstAvg = firstHalf.reduce((a, b) => a + b, 0) / firstHalf.length;
+    const secondAvg = secondHalf.reduce((a, b) => a + b, 0) / secondHalf.length;
+    
+    const diff = secondAvg - firstAvg;
+    trends[emotion].change = diff;
+    
+    if (diff > 0.1) {
+      trends[emotion].trend = 'rising';
+    } else if (diff < -0.1) {
+      trends[emotion].trend = 'falling';
+    } else {
+      trends[emotion].trend = 'stable';
+    }
+  }
+  
+  return trends;
+}
+
+/**
+ * Get human-readable emotion trend summary
+ */
+export function getEmotionTrendSummary(trends) {
+  const summary = [];
+  
+  for (const [emotion, data] of Object.entries(trends)) {
+    if (data.trend === 'stable' || Math.abs(data.change) < 0.05) continue;
+    
+    const direction = data.trend === 'rising' ? '↑' : '↓';
+    const intensity = Math.abs(data.change) > 0.2 ? 'sharply ' : '';
+    
+    summary.push({
+      emotion,
+      direction,
+      trend: data.trend,
+      change: data.change,
+      description: `${emotion} ${intensity}${data.trend}ing`,
+    });
+  }
+  
+  return summary.sort((a, b) => Math.abs(b.change) - Math.abs(a.change));
+}
+
+/**
+ * Extract entities (characters + inventory) from content for selective invalidation
+ * Returns array of normalized entity names for comparison
+ */
+export function extractEntities(content) {
+  if (!content) return [];
+  
+  const characters = extractCharacters(content);
+  const inventory = extractInventory(content);
+  
+  const entities = new Set();
+  
+  for (const char of characters) {
+    entities.add(char.name.toLowerCase());
+  }
+  
+  for (const item of inventory) {
+    entities.add(item.name.toLowerCase());
+  }
+  
+  return Array.from(entities);
 }

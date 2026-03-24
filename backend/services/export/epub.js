@@ -5,11 +5,24 @@ const path = require('path');
 const { balance, report } = require('../../utils/chapterBalancer');
 const logger = require('../../utils/logger');
 const crypto = require('crypto');
+const { assertValidStatus, VALID_STATUS } = require('../core/contracts');
 
-async function exportEpub(content, metadata = {}) {
+async function exportEpub(scenes, metadata = {}) {
   const { title = 'Untitled', author = 'Unknown', balanceChapters = true } = metadata;
-
-  let chapters = Array.isArray(content) ? content : content.split(/\n{3,}/);
+  
+  // Export integrity: only export generated chapters
+  const exportable = scenes.filter(s => s.status === 'generated');
+  
+  // Warn if we're dropping non-final chapters
+  if (exportable.length !== scenes.length) {
+    logger.warn('Export contains non-final chapters', {
+      total: scenes.length,
+      exportable: exportable.length,
+      dropped: scenes.length - exportable.length,
+    });
+  }
+  
+  let chapters = exportable.map(s => s.content);
 
   if (balanceChapters) {
     chapters = balance(chapters);

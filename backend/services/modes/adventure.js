@@ -2,8 +2,8 @@
 const { PromptTemplate } = require('@langchain/core/prompts');
 const { LLMChain } = require('langchain/chains');
 const { llm } = require('../core/llm');
-const { validateState, diffState, emptyState } = require('../../utils/stateValidator');
-const { buildConstraintBlock, checkHardViolations } = require('../../utils/constraints');
+const { validateState, diffState, emptyState } = require('../services/validators/StateValidator');
+const { buildConstraintBlock, checkHardViolations } = require('../services/validators/ConstraintValidator');
 const { getVariation } = require('../agents/styleVariance');
 const { updateEmotion, describeEmotion, emptyEmotionState } = require('../../utils/emotionState');
 const logger = require('../../utils/logger');

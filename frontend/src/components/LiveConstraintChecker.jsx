@@ -90,7 +90,7 @@ export default function LiveConstraintChecker({
   }, []);
   
   // Check for soft constraint warnings (tone, pacing, etc.)
-  const checkSoftConstraints = useCallback((text) => {
+  const checkSoftConstraints = useCallback((text, currentInventory = []) => {
     const issues = [];
     const lowerText = text.toLowerCase();
     
@@ -134,6 +134,46 @@ export default function LiveConstraintChecker({
       }
     }
     
+    // Predictive warnings: Check if user is about to violate constraints
+    // Example: "John reached for the lantern" when lantern is not in inventory
+    const predictivePatterns = [
+      { 
+        pattern: /(\w+)\s+(?:reached for|picked up|grabbed|took|found|discovered)\s+(?:the\s+)?(\w+)/gi,
+        check: (match, text, prevInventory) => {
+          const item = match[2].toLowerCase();
+          const hasItem = prevInventory.some(inv => 
+            (typeof inv === 'string' ? inv.toLowerCase() : inv.name?.toLowerCase()) === item
+          );
+          if (!hasItem) {
+            return {
+              type: 'predictive',
+              message: `"${match[2]}" is not in the current inventory`,
+              blocking: false,
+              suggestion: `Did you mean to add "${match[2]}" to the inventory?`,
+            };
+          }
+          return null;
+        },
+      },
+      {
+        pattern: /(\w+)\s+(?:walked into|entered|went to|arrived at)\s+(?:the\s+)?(\w+)/gi,
+        check: (match) => {
+          // Could check for location consistency
+          return null;
+        },
+      },
+    ];
+    
+    for (const { pattern, check } of predictivePatterns) {
+      let match;
+      while ((match = pattern.exec(text)) !== null) {
+        const warning = check(match, text, previousState.inventory || []);
+        if (warning) {
+          issues.push(warning);
+        }
+      }
+    }
+    
     return issues;
   }, []);
   
@@ -155,7 +195,7 @@ export default function LiveConstraintChecker({
       ...checkInventory(content, previousState.inventory, previousState.removedInventory),
     ];
     
-    const newWarnings = checkSoftConstraints(content);
+    const newWarnings = checkSoftConstraints(content, previousState.inventory || []);
     
     setBlocking(newBlocking);
     setWarnings(newWarnings);

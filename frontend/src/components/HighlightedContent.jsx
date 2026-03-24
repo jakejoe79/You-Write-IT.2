@@ -30,31 +30,58 @@ export default function HighlightedContent({
     return detectEmotions(content);
   }, [content]);
   
-  // Calculate directional emotion changes
+  // Calculate directional emotion changes (rolling trend)
   const directionalEmotions = useMemo(() => {
-    if (!emotionState || !previousEmotionState) return null;
+    if (!emotionState) return null;
     
-    const directions = [];
-    const emotions = emotionState.protagonist || {};
-    const prevEmotions = (previousEmotionState.protagonist || {});
-    
-    for (const [emotion, value] of Object.entries(emotions)) {
-      const prevValue = prevEmotions[emotion] || 0;
-      const diff = value - prevValue;
+    // If we have previousEmotionState, use it for direct comparison
+    if (previousEmotionState) {
+      const directions = [];
+      const emotions = emotionState.protagonist || {};
+      const prevEmotions = (previousEmotionState.protagonist || {});
       
-      if (Math.abs(diff) > 0.05) {  // Only show significant changes
-        directions.push({
-          emotion,
-          current: value,
-          previous: prevValue,
-          change: diff,
-          direction: diff > 0 ? '↑' : diff < 0 ? '↓' : '→',
-          color: diff > 0 ? '#22c55e' : diff < 0 ? '#ef4444' : '#6b7280',
-        });
+      for (const [emotion, value] of Object.entries(emotions)) {
+        const prevValue = prevEmotions[emotion] || 0;
+        const diff = value - prevValue;
+        
+        if (Math.abs(diff) > 0.05) {  // Only show significant changes
+          directions.push({
+            emotion,
+            current: value,
+            previous: prevValue,
+            change: diff,
+            direction: diff > 0 ? '↑' : diff < 0 ? '↓' : '→',
+            color: diff > 0 ? '#22c55e' : diff < 0 ? '#ef4444' : '#6b7280',
+          });
+        }
       }
+      
+      return directions.sort((a, b) => Math.abs(b.change) - Math.abs(a.change));
     }
     
-    return directions.sort((a, b) => Math.abs(b.change) - Math.abs(a.change));
+    // Otherwise, use rolling trend if available
+    if (emotionState.rollingTrend) {
+      const trends = emotionState.rollingTrend;
+      const directions = [];
+      
+      for (const [emotion, data] of Object.entries(trends)) {
+        if (data.trend === 'stable' || Math.abs(data.change) < 0.05) continue;
+        
+        directions.push({
+          emotion,
+          current: data.values?.[data.values.length - 1] || 0,
+          previous: data.values?.[0] || 0,
+          change: data.change,
+          direction: data.trend === 'rising' ? '↑' : data.trend === 'falling' ? '↓' : '→',
+          color: data.trend === 'rising' ? '#22c55e' : data.trend === 'falling' ? '#ef4444' : '#6b7280',
+          trend: data.trend,
+        });
+      }
+      
+      return directions.sort((a, b) => Math.abs(b.change) - Math.abs(a.change));
+    }
+    
+    return null;
   }, [emotionState, previousEmotionState]);
   
   // Get character status for each character
@@ -138,34 +165,48 @@ export default function HighlightedContent({
         </div>
       )}
       
-      {/* Inventory legend with memory */}
+      {/* Inventory legend with memory and status */}
       {showHighlights && inventory.length > 0 && (
         <div className="inventory-legend" style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
           {inventory.map(item => {
-            const origin = inventoryOrigins[item] || {};
+            const origin = inventoryOrigins[item.name || item] || {};
+            const status = item.status || 'active';
+            
+            // Status colors
+            const statusColors = {
+              active: { bg: 'rgba(34, 197, 94, 0.2)', border: '#22c55e', icon: '✓' },
+              lost: { bg: 'rgba(239, 68, 68, 0.2)', border: '#ef4444', icon: '✗' },
+              transferred: { bg: 'rgba(59, 130, 246, 0.2)', border: '#3b82f6', icon: '→' },
+              destroyed: { bg: 'rgba(107, 114, 128, 0.2)', border: '#6b7280', icon: '✂' },
+            };
+            
+            const statusStyle = statusColors[status] || statusColors.active;
+            
             return (
               <span
-                key={item}
+                key={item.id || item.name || item}
                 className="inventory-badge"
                 onMouseEnter={() => setHoveredItem({ 
                   type: 'inventory', 
-                  name: item,
+                  name: item.name || item,
+                  status,
                   origin: origin.firstChapter,
                   lastReferenced: origin.lastChapter,
                 })}
                 onMouseLeave={() => setHoveredItem(null)}
                 style={{
-                  background: 'rgba(251, 191, 36, 0.2)',
+                  background: statusStyle.bg,
                   padding: '0.2rem 0.5rem',
                   borderRadius: '4px',
                   fontSize: '0.7rem',
-                  border: '1px solid #fbbf24',
+                  border: `1px solid ${statusStyle.border}`,
                   cursor: 'pointer',
-                  textDecoration: 'underline',
+                  textDecoration: status === 'destroyed' ? 'line-through' : 'underline',
                   textDecorationStyle: 'dotted',
                 }}
               >
-                {item}
+                <span style={{ marginRight: '0.25rem', opacity: 0.7 }}>{statusStyle.icon}</span>
+                {item.name || item}
                 {origin.firstChapter !== undefined && (
                   <span style={{ marginLeft: '0.25rem', opacity: 0.7 }}>
                     (Ch. {origin.firstChapter + 1})
@@ -266,6 +307,21 @@ export default function HighlightedContent({
           {hoveredItem.type === 'character' && (
             <div style={{ fontSize: '0.75rem', color: '#888', marginTop: '0.25rem' }}>
               {ROLE_COLORS[inferCharacterRole(hoveredItem.name, content, characters)]?.label || 'Character'}
+            </div>
+          )}
+          {hoveredItem.type === 'inventory' && hoveredItem.status && (
+            <div style={{ fontSize: '0.75rem', color: '#888', marginTop: '0.25rem' }}>
+              Status: {hoveredItem.status}
+            </div>
+          )}
+          {hoveredItem.origin !== undefined && (
+            <div style={{ fontSize: '0.7rem', color: '#666', marginTop: '0.25rem' }}>
+              First appeared: Chapter {hoveredItem.origin + 1}
+            </div>
+          )}
+          {hoveredItem.lastReferenced !== undefined && (
+            <div style={{ fontSize: '0.7rem', color: '#666', marginTop: '0.1rem' }}>
+              Last referenced: Chapter {hoveredItem.lastReferenced + 1}
             </div>
           )}
         </div>

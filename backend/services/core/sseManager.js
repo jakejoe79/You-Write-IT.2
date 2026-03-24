@@ -2,7 +2,7 @@
  * SSEManager - Handles SSE streaming with idempotency, resume, and mid-token handling
  */
 
-const { getSession, updateSession, addScene, getScenes } = require('../db/sqlite');
+const { getSession, updateSession, addScene, getScenes } = require('../../db/sqlite');
 const crypto = require('crypto');
 
 /**
@@ -72,12 +72,27 @@ class TokenBuffer {
 class SSEManager {
   constructor() {
     this.buffers = new Map(); // sessionId -> TokenBuffer
+    this.maxBuffers = 100; // Prevent memory leaks from long-lived sessions
+  }
+
+  /**
+   * Enforce size limit on buffers
+   */
+  enforceSizeLimit() {
+    if (this.buffers.size >= this.maxBuffers) {
+      // Remove oldest entry (first key in Map)
+      const oldestKey = this.buffers.keys().next().value;
+      if (oldestKey) {
+        this.buffers.delete(oldestKey);
+      }
+    }
   }
 
   /**
    * Get or create token buffer for a session
    */
   getBuffer(sessionId) {
+    this.enforceSizeLimit();
     if (!this.buffers.has(sessionId)) {
       this.buffers.set(sessionId, new TokenBuffer());
     }
@@ -223,5 +238,6 @@ module.exports = {
   SSEManager: new SSEManager(),
   generateEventId,
   TokenBuffer,
-  SENTENCE_ENDINGS
+  SENTENCE_ENDINGS,
+  clearBuffer: (sessionId) => SSEManager.clearBuffer(sessionId),
 };

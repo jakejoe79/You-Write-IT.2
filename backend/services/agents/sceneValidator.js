@@ -2,16 +2,29 @@
 // If it didn't, the pipeline regenerates with a stronger instruction.
 // This is the difference between intending structure and enforcing it.
 
-const { LLMChain } = require('langchain/chains');
 const { PromptTemplate } = require('@langchain/core/prompts');
 const { llm } = require('../core/llm');
 const logger = require('../../utils/logger');
 
-const MAX_RETRIES = 2;
+const MAX_RETRIES = 3;
 
-const validateChain = new LLMChain({
-  llm,
-  prompt: PromptTemplate.fromTemplate(`
+// Use mock LLM for testing if MOCK_LLM env var is set
+const useMockLlm = process.env.MOCK_LLM === 'true';
+let LLMChain, validateChain, regenerateChain;
+
+if (useMockLlm) {
+  const { createMockChain } = require('../core/mockLlm');
+  const mockChains = createMockChain();
+  LLMChain = { fromTemplate: () => mockChains };
+  validateChain = mockChains;
+  regenerateChain = mockChains;
+} else {
+  const { LLMChain: RealLLMChain } = require('langchain/chains');
+  LLMChain = RealLLMChain;
+  
+  validateChain = new LLMChain({
+    llm,
+    prompt: PromptTemplate.fromTemplate(`
 You are a story editor reviewing a scene against its intended purpose.
 
 Intended purpose: {purpose}
@@ -22,12 +35,12 @@ Scene:
 Does this scene clearly achieve its intended purpose?
 Answer with PASS or FAIL on the first line.
 Then explain briefly (1–2 sentences). Be specific.
-  `.trim()),
-});
+    `.trim()),
+  });
 
-const regenerateChain = new LLMChain({
-  llm,
-  prompt: PromptTemplate.fromTemplate(`
+  regenerateChain = new LLMChain({
+    llm,
+    prompt: PromptTemplate.fromTemplate(`
 {originalPrompt}
 
 IMPORTANT: The previous attempt failed to achieve this purpose: {purpose}
@@ -35,8 +48,9 @@ Reason it failed: {reason}
 
 This time, make the purpose unmistakable. Do not be subtle about it.
 Rewrite the scene now:
-  `.trim()),
-});
+    `.trim()),
+  });
+}
 
 /**
  * Validates a scene against its expected purpose.
@@ -82,8 +96,8 @@ async function generateAndValidate(chain, callArgs, expectedPurpose) {
     }
   }
 
-  // After max retries, use the last attempt anyway — log the failure
-  logger.warn(`Scene did not pass after ${MAX_RETRIES} retries. Using last attempt.`);
+  // After max retries, use the best attempt but mark as degraded
+  logger.warn(`Scene did not pass after ${MAX_RETRIES} retries. Using best attempt.`);
   return { text, validation };
 }
 

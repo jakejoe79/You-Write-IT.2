@@ -116,6 +116,52 @@
   align-items: center;
 }
 
+/* Status badges */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.7rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+}
+
+.status-generated {
+  color: #3a3;
+  background: rgba(34, 204, 34, 0.1);
+  border: 1px solid rgba(34, 204, 34, 0.3);
+}
+
+.status-edited {
+  color: #4a4aff;
+  background: rgba(74, 74, 255, 0.1);
+  border: 1px solid rgba(74, 74, 255, 0.3);
+}
+
+.status-stale {
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+}
+
+.status-recomputing {
+  color: #4a4aff;
+  background: rgba(74, 74, 255, 0.1);
+  border: 1px solid rgba(74, 74, 255, 0.3);
+  animation: pulse 1s infinite;
+}
+
+.status-error {
+  color: #f55;
+  background: rgba(255, 68, 68, 0.1);
+  border: 1px solid rgba(255, 68, 68, 0.3);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
 .edited-badge {
   font-size: 0.7rem;
   color: #3a3;
@@ -459,4 +505,182 @@
   font-size: 0.7rem;
   color: #888;
   margin-top: 0.25rem;
+}
+/* Impact summary for derived chapters */
+.impact-summary {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid #333;
+  font-size: 0.7rem;
+  color: #888;
+}
+
+.impact-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.2rem 0;
+}
+
+.impact-char {
+  color: #4a4aff;
+  font-weight: 500;
+}
+
+.impact-inv {
+  color: #fbbf24;
+  font-weight: 500;
+}
+
+.impact-desc {
+  color: #888;
+}
+
+/* Predictive warning styling */
+.constraint-warning.predictive {
+  background: rgba(59, 130, 246, 0.1);
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+.constraint-warning.predictive .warning-icon {
+  color: #3b82f6;
+}
+
+/* Inventory status indicators */
+.inventory-badge .status-icon {
+  margin-right: 0.25rem;
+  opacity: 0.7;
+}
+
+.inventory-badge.status-lost {
+  text-decoration: line-through;
+}
+
+.inventory-badge.status-destroyed {
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+/* Branch personality and focus mode */
+.personality-badge {
+  font-size: 0.65rem;
+  color: #888;
+  background: rgba(74, 74, 255, 0.1);
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pin-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 0.8rem;
+  opacity: 0.5;
+  padding: 0.2rem;
+}
+
+.pin-btn:hover, .pin-btn.pinned {
+  opacity: 1;
+}
+
+.branch-row.pinned {
+  background: rgba(251, 191, 36, 0.1);
+  border-left: 2px solid #fbbf24;
+}
+
+.branch-stats {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.7rem;
+  color: #666;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid #2a2a2a;
+}
+
+.btn-focus {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 0.2rem;
+}
+
+.btn-focus:hover {
+  transform: scale(1.1);
+}
+
+.focus-toggle {
+  background: #1a1a2e;
+  border: 1px solid #333;
+  border-radius: 6px;
+  padding: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.focus-toggle label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: #e8e8e8;
+  cursor: pointer;
+}
+
+.focus-toggle input[type="checkbox"] {
+  accent-color: #4a4aff;
+}
+
+.focus-help {
+  font-size: 0.7rem;
+  color: #666;
+  margin: 0.5rem 0 0 1.5rem;
+}
+
+/* Narrative diff display */
+.narrative-diff {
+  background: #141414;
+  border: 1px solid #2a2a2a;
+  border-radius: 8px;
+  padding: 1rem;
+  margin-top: 1rem;
+}
+
+.narrative-diff h4 {
+  margin: 0 0 0.75rem 0;
+  font-size: 0.9rem;
+  color: #888;
+}
+
+.diff-summary {
+  font-size: 0.85rem;
+  color: #e8e8e8;
+  line-height: 1.6;
+}
+
+.diff-summary .diff-item {
+  padding: 0.4rem 0;
+  border-bottom: 1px solid #1e1e1e;
+}
+
+.diff-summary .diff-item:last-child {
+  border-bottom: none;
+}
+
+.diff-branch-a {
+  color: #3b82f6;
+  font-weight: 500;
+}
+
+.diff-branch-b {
+  color: #22c55e;
+  font-weight: 500;
+}
+
+/* Checkpoint indicator */
+.branch-icon.checkpoint {
+  color: #fbbf24;
 }

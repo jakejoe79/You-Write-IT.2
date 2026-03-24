@@ -1,0 +1,207 @@
+The Shape of the System (what you’re actually building)
+
+You are not storing stories.
+
+You are storing:
+
+state over time + branching causality
+
+That means:
+
+Sessions (container)
+Branches (timelines)
+Chapters (content)
+Nodes (immutable snapshots)
+Operations (recompute/edit history)
+🧱 MINIMAL BUT PROPER DB SCHEMA (PostgreSQL)
+1. sessions
+CREATE TABLE sessions (
+  id UUID PRIMARY KEY,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW(),
+  mode TEXT DEFAULT 'story',
+  metadata JSONB
+);
+2. branches
+
+Each branch = a timeline
+
+CREATE TABLE branches (
+  id UUID PRIMARY KEY,
+  session_id UUID REFERENCES sessions(id) ON DELETE CASCADE,
+  parent_branch_id UUID,
+  name TEXT,
+  created_at TIMESTAMP DEFAULT NOW(),
+  checkpoint BOOLEAN DEFAULT FALSE
+);
+3. chapters
+
+Mutable working state (fast reads)
+
+CREATE TABLE chapters (
+  id UUID PRIMARY KEY,
+  session_id UUID REFERENCES sessions(id) ON DELETE CASCADE,
+  branch_id UUID REFERENCES branches(id) ON DELETE CASCADE,
+  chapter_index INT,
+  content TEXT,
+  status TEXT, -- GENERATED, EDITED, STALE, RECOMPUTING, ERROR
+  word_count INT,
+  metadata JSONB,
+  updated_at TIMESTAMP DEFAULT NOW(),
+
+  UNIQUE(session_id, branch_id, chapter_index)
+);
+4. nodes (THIS is your Git layer)
+
+Immutable snapshots of story state
+
+CREATE TABLE nodes (
+  id TEXT PRIMARY KEY, -- hashVersion(chapters)
+  session_id UUID REFERENCES sessions(id) ON DELETE CASCADE,
+  branch_id UUID REFERENCES branches(id) ON DELETE CASCADE,
+  parent_id TEXT,
+  created_at TIMESTAMP DEFAULT NOW(),
+  checkpoint BOOLEAN DEFAULT FALSE
+);
+5. node_chapters
+
+Snapshot of chapters at that node
+
+CREATE TABLE node_chapters (
+  node_id TEXT REFERENCES nodes(id) ON DELETE CASCADE,
+  chapter_index INT,
+  content TEXT,
+  PRIMARY KEY (node_id, chapter_index)
+);
+6. operations (this is your observability backbone)
+CREATE TABLE operations (
+  id UUID PRIMARY KEY,
+  session_id UUID,
+  branch_id UUID,
+  type TEXT, -- EDIT, RECOMPUTE, GENERATE
+  status TEXT, -- RUNNING, COMPLETE, FAILED
+  payload JSONB,
+  created_at TIMESTAMP DEFAULT NOW(),
+  completed_at TIMESTAMP
+);
+⚙️ Node.js DB Layer (the part you actually use)
+
+Using pg:
+
+npm install pg
+db.js
+const { Pool } = require('pg');
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+});
+
+module.exports = {
+  query: (text, params) => pool.query(text, params),
+};
+🧩 CORE OPERATIONS
+1. Create Session
+const { v4: uuid } = require('uuid');
+const db = require('./db');
+
+async function createSession() {
+  const id = uuid();
+
+  await db.query(
+    `INSERT INTO sessions (id) VALUES ($1)`,
+    [id]
+  );
+
+  return id;
+}
+2. Create Root Branch
+async function createRootBranch(sessionId) {
+  const id = uuid();
+
+  await db.query(
+    `INSERT INTO branches (id, session_id, name)
+     VALUES ($1, $2, 'root')`,
+    [id, sessionId]
+  );
+
+  return id;
+}
+3. Save Chapters
+async function saveChapters(sessionId, branchId, chapters) {
+  const queries = chapters.map((content, index) => {
+    return db.query(
+      `INSERT INTO chapters (id, session_id, branch_id, chapter_index, content, status)
+       VALUES ($1, $2, $3, $4, $5, 'GENERATED')
+       ON CONFLICT (session_id, branch_id, chapter_index)
+       DO UPDATE SET content = EXCLUDED.content, status = 'GENERATED'`,
+      [uuid(), sessionId, branchId, index, content]
+    );
+  });
+
+  await Promise.all(queries);
+}
+4. Create Node (Immutable Snapshot)
+const crypto = require('crypto');
+
+function hashVersion(chapters) {
+  return crypto
+    .createHash('sha256')
+    .update(JSON.stringify(chapters))
+    .digest('hex');
+}
+
+async function createNode(sessionId, branchId, chapters, parentId = null) {
+  const nodeId = hashVersion(chapters);
+
+  await db.query(
+    `INSERT INTO nodes (id, session_id, branch_id, parent_id)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT DO NOTHING`,
+    [nodeId, sessionId, branchId, parentId]
+  );
+
+  const inserts = chapters.map((c, i) =>
+    db.query(
+      `INSERT INTO node_chapters (node_id, chapter_index, content)
+       VALUES ($1, $2, $3)
+       ON CONFLICT DO NOTHING`,
+      [nodeId, i, c.content]
+    )
+  );
+
+  await Promise.all(inserts);
+
+  return nodeId;
+}
+5. Edit Chapter (this is where causality breaks)
+async function editChapter(sessionId, branchId, index, newContent) {
+  await db.query(
+    `UPDATE chapters
+     SET content = $1, status = 'EDITED'
+     WHERE session_id = $2 AND branch_id = $3 AND chapter_index = $4`,
+    [newContent, sessionId, branchId, index]
+  );
+
+  // Mark downstream as stale
+  await db.query(
+    `UPDATE chapters
+     SET status = 'STALE'
+     WHERE session_id = $1 AND branch_id = $2 AND chapter_index > $3`,
+    [sessionId, branchId, index]
+  );
+}
+6. Get Story (normalized for your frontend)
+async function getStory(sessionId, branchId) {
+  const res = await db.query(
+    `SELECT chapter_index, content, status
+     FROM chapters
+     WHERE session_id = $1 AND branch_id = $2
+     ORDER BY chapter_index ASC`,
+    [sessionId, branchId]
+  );
+
+  return {
+    chapters: res.rows.map(r => r.content),
+    metadata: res.rows,
+  };
+}

@@ -1,13 +1,26 @@
 // Continuity agent — catches contradictions across scenes
 // Extracts facts from each scene, then cross-checks for conflicts
 const { PromptTemplate } = require('@langchain/core/prompts');
-const { LLMChain } = require('langchain/chains');
 const { llm } = require('../core/llm');
 
-// Extract named entities + facts from a scene
-const extractChain = new LLMChain({
-  llm,
-  prompt: PromptTemplate.fromTemplate(`
+// Use mock LLM for testing if MOCK_LLM env var is set
+const useMockLlm = process.env.MOCK_LLM === 'true';
+let LLMChain, extractChain, checkChain, fixChain;
+
+if (useMockLlm) {
+  const { createMockChain } = require('../core/mockLlm');
+  const mockChains = createMockChain();
+  LLMChain = { fromTemplate: () => mockChains };
+  extractChain = mockChains;
+  checkChain = mockChains;
+  fixChain = mockChains;
+} else {
+  const { LLMChain: RealLLMChain } = require('langchain/chains');
+  LLMChain = RealLLMChain;
+  
+  extractChain = new LLMChain({
+    llm,
+    prompt: PromptTemplate.fromTemplate(`
 Extract a concise list of facts from this scene. Include:
 - Character names and their traits/roles
 - Locations mentioned
@@ -18,13 +31,12 @@ Scene:
 {scene}
 
 Return as a numbered list. Be brief.
-  `.trim()),
-});
+    `.trim()),
+  });
 
-// Cross-check a new scene against established facts
-const checkChain = new LLMChain({
-  llm,
-  prompt: PromptTemplate.fromTemplate(`
+  checkChain = new LLMChain({
+    llm,
+    prompt: PromptTemplate.fromTemplate(`
 You are a continuity editor. Compare the new scene against the established facts.
 
 Established facts:
@@ -36,13 +48,12 @@ New scene:
 List any contradictions, inconsistencies, or continuity errors you find.
 If there are none, say "No issues found."
 Be specific — quote the conflicting parts.
-  `.trim()),
-});
+    `.trim()),
+  });
 
-// Fix a scene given a list of continuity issues
-const fixChain = new LLMChain({
-  llm,
-  prompt: PromptTemplate.fromTemplate(`
+  fixChain = new LLMChain({
+    llm,
+    prompt: PromptTemplate.fromTemplate(`
 Rewrite the scene to fix the following continuity issues. 
 Preserve the original tone, style, and plot intent. Only fix the errors.
 
@@ -53,8 +64,9 @@ Original scene:
 {scene}
 
 Return only the corrected scene.
-  `.trim()),
-});
+    `.trim()),
+  });
+}
 
 /**
  * Process an array of scenes sequentially.

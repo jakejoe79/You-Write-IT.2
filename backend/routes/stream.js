@@ -14,7 +14,10 @@ const { LLMChain } = require('langchain/chains');
 const { PromptTemplate } = require('@langchain/core/prompts');
 const { llm } = require('../services/core/llm');
 const { chunk } = require('../utils/chunker');
-const { SSEManager, generateEventId } = require('../services/core/sseManager');
+const { SSEManager, generateEventId, clearBuffer } = require('../services/core/sseManager');
+const { nextGeneration, getCurrentGeneration, assertValidGeneration, generationMap, resetGeneration } = require('../services/core/concurrency');
+const { logger } = require('../services/core/tracing');
+const { checkRateLimit, getRemaining } = require('../services/core/rateLimiter');
 const ChapterAccumulator = require('../utils/chapterAccumulator');
 const fs = require('fs');
 const path = require('path');
@@ -121,6 +124,22 @@ router.post('/story', async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.flushHeaders();
 
+  const id = sessionId || await createSession({
+    mode: 'story', title: input?.slice(0, 50), genre, authorStyle, protagonist,
+    state: { characters: {}, inventory: [], choices_made: [], world_rules: [] },
+  });
+
+  // 🔥 Client disconnect handling - guaranteed cleanup
+  req.on('close', () => {
+    logger.info('Client disconnected', { sessionId: id });
+    try {
+      clearBuffer(id);
+      resetGeneration(id);
+    } catch (err) {
+      logger.error('SSE cleanup on disconnect failed', { sessionId: id, error: err.message });
+    }
+  });
+
   try {
     // Check for resume
     let startChapter = 0;
@@ -209,9 +228,16 @@ router.post('/story', async (req, res) => {
     send(res, 'done', { sessionId: id, chapters: rawChapters, continuityReport: report });
   } catch (err) { 
     send(res, 'error', { message: err.message }); 
-  }
-  finally { 
-    res.end(); 
+  } finally { 
+    res.end();
+    // 🔥 SSE cleanup - guaranteed, not optional
+    try {
+      clearBuffer(id);
+      resetGeneration(id);
+      logger.info('SSE cleanup complete', { sessionId: id });
+    } catch (cleanupErr) {
+      logger.error('SSE cleanup failed', { sessionId: id, error: cleanupErr.message });
+    }
   }
 });
 
@@ -224,6 +250,22 @@ router.post('/abridge', async (req, res) => {
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.flushHeaders();
+
+  const id = sessionId || await createSession({
+    mode: 'abridge', title: input?.slice(0, 50), reading_level,
+    state: {},
+  });
+
+  // 🔥 Client disconnect handling - guaranteed cleanup
+  req.on('close', () => {
+    logger.info('Client disconnected', { sessionId: id });
+    try {
+      clearBuffer(id);
+      resetGeneration(id);
+    } catch (err) {
+      logger.error('SSE cleanup on disconnect failed', { sessionId: id, error: err.message });
+    }
+  });
 
   try {
     // Check for resume
@@ -287,9 +329,16 @@ router.post('/abridge', async (req, res) => {
     send(res, 'done', { sessionId: id, total: chunks.length });
   } catch (err) { 
     send(res, 'error', { message: err.message }); 
-  }
-  finally { 
-    res.end(); 
+  } finally { 
+    res.end();
+    // 🔥 SSE cleanup - guaranteed, not optional
+    try {
+      clearBuffer(id);
+      resetGeneration(id);
+      logger.info('SSE cleanup complete', { sessionId: id });
+    } catch (cleanupErr) {
+      logger.error('SSE cleanup failed', { sessionId: id, error: cleanupErr.message });
+    }
   }
 });
 
@@ -302,6 +351,21 @@ router.post('/adventure', async (req, res) => {
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.flushHeaders();
+
+  const id = sessionId || await createSession({
+    mode: 'adventure', title: input?.slice(0, 50), state: initialState,
+  });
+
+  // 🔥 Client disconnect handling - guaranteed cleanup
+  req.on('close', () => {
+    logger.info('Client disconnected', { sessionId: id });
+    try {
+      clearBuffer(id);
+      resetGeneration(id);
+    } catch (err) {
+      logger.error('SSE cleanup on disconnect failed', { sessionId: id, error: err.message });
+    }
+  });
 
   try {
     // Check for resume
@@ -358,9 +422,16 @@ router.post('/adventure', async (req, res) => {
     send(res, 'done', { sessionId: id, branches: generated });
   } catch (err) { 
     send(res, 'error', { message: err.message }); 
-  }
-  finally { 
-    res.end(); 
+  } finally { 
+    res.end();
+    // 🔥 SSE cleanup - guaranteed, not optional
+    try {
+      clearBuffer(id);
+      resetGeneration(id);
+      logger.info('SSE cleanup complete', { sessionId: id });
+    } catch (cleanupErr) {
+      logger.error('SSE cleanup failed', { sessionId: id, error: cleanupErr.message });
+    }
   }
 });
 
@@ -445,6 +516,17 @@ router.post('/session/:id/recompute/:index', async (req, res) => {
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.flushHeaders();
+
+  // 🔥 Client disconnect handling - guaranteed cleanup
+  req.on('close', () => {
+    logger.info('Client disconnected', { sessionId: id });
+    try {
+      clearBuffer(id);
+      resetGeneration(id);
+    } catch (err) {
+      logger.error('SSE cleanup on disconnect failed', { sessionId: id, error: err.message });
+    }
+  });
 
   try {
     // Get session and chapters
@@ -550,9 +632,16 @@ router.post('/session/:id/recompute/:index', async (req, res) => {
     });
   } catch (err) { 
     send(res, 'error', { message: err.message }); 
-  }
-  finally { 
-    res.end(); 
+  } finally { 
+    res.end();
+    // 🔥 SSE cleanup - guaranteed, not optional
+    try {
+      clearBuffer(id);
+      resetGeneration(id);
+      logger.info('SSE cleanup complete', { sessionId: id });
+    } catch (cleanupErr) {
+      logger.error('SSE cleanup failed', { sessionId: id, error: cleanupErr.message });
+    }
   }
 });
 
