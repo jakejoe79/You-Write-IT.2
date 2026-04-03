@@ -201,11 +201,11 @@ export default function Story() {
   useEffect(() => { activeNodeRef.current = currentNodeId; }, [currentNodeId]);
   
   const { 
-    chapters, 
+    scenes: chapters, 
     progress, 
     sessionId, 
     startStreaming, 
-    setChapters,
+    setScenes: setChapters,
     setProgress,
   } = useSceneList('story');
 
