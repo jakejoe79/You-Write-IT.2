@@ -518,6 +518,5 @@ export {
   VALID_TRANSITIONS,
   buildStoryResponse,
   buildSceneResponse,
-  buildScenesResponse,
-  CONTRACT_VERSION 
+  buildScenesResponse
 };
