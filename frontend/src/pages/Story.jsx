@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import SceneList, { useSceneList } from '../components/editor/SceneList.jsx';
+import SceneList, { useSceneList } from '../components/SceneList.jsx';
 import ExportButton from '../components/ExportButton.jsx';
 
 const GENRES      = ['thriller', 'horror', 'fantasy', 'romance', 'mystery', 'literary'];

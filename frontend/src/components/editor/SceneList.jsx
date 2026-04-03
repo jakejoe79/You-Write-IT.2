@@ -21,7 +21,7 @@ function estimateSceneHeight(scene) {
  * Replaces ChapterList for scene-based streaming
  */
 export default function SceneList({ 
-  scenes, 
+  scenes = [], 
   onEdit, 
   onRecompute,
   branchId = null,
