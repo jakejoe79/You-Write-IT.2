@@ -2,8 +2,8 @@
 // Replaces ChapterEditor for scene-based streaming
 
 import { useState, useCallback, useMemo, useEffect } from 'react';
-import HighlightedContent from '../highlights/HighlightedContent.jsx';
-import LiveConstraintChecker from '../highlights/LiveConstraintChecker.jsx';
+import HighlightedContent from '../HighlightedContent.jsx';
+import LiveConstraintChecker from '../LiveConstraintChecker.jsx';
 import { extractCharacters, extractInventory } from '../../utils/highlightParser.js';
 
 /**
