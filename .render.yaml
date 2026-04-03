@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: ai-book-factory
+    env: node
+    region: oregon
+    plan: starter
+    branch: main
+    buildCommand: npm ci --only=production
+    startCommand: node backend/server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: OLLAMA_URL
+        sync: false
+      - key: OLLAMA_MODEL
+        value: llama3
+      - key: CHROMA_URL
+        sync: false
+    healthCheckPath: /health
+    autoDeploy: true

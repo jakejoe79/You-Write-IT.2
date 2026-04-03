@@ -5,7 +5,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { SystemError } = require('../services/core/errors');
 
-const DB_PATH = path.resolve(__dirname, '../../data/factory.db');
+const DB_PATH = process.env.DB_PATH || path.resolve(__dirname, '../../data/factory.db');
 
 let db = null;
 
