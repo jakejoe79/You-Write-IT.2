@@ -37,9 +37,9 @@ export function updateChapterStatus(chapter, nextStatus) {
 // ============================================
 // 2. OPERATION LOCK + GENERATION CONTROL
 // ============================================
-const generationRef = useRef(0);
-const abortRef = useRef(null);
-const opRef = useRef(null);
+const generationRef = { current: 0 };
+const abortRef = { current: null };
+const opRef = { current: null };
 
 function startOperation(type) {
   if (opRef.current) {
