@@ -3,7 +3,7 @@ const router = express.Router();
 const { getGenre } = require('../config/genreProfiles');
 const { getStyleGuidelines } = require('../config/styleMapper');
 const { getVariation } = require('../services/agents/styleVariance');
-const { buildConstraintBlock, checkHardViolations, validateEdit } = require('../utils/constraints');
+const { buildConstraintBlock, checkHardViolations, validateEdit } = require('../services/validators/ConstraintValidator');
 const { updateEmotion, describeEmotion, emptyEmotionState, applyGenreBias } = require('../utils/emotionState');
 const { ContextWindow } = require('../services/core/memoryCompressor');
 const { getVoiceBlock } = require('../characters/voiceProfiles');
@@ -24,8 +24,8 @@ const path = require('path');
 const crypto = require('crypto');
 
 const writerPrompt = fs.readFileSync(path.resolve(__dirname, '../../prompts/writer.txt'), 'utf8');
-const abridgedPrompt = fs.readFileSync(path.resolve(__dirname, '../../../prompts/abridged.txt'), 'utf8');
-const adventurePrompt = fs.readFileSync(path.resolve(__dirname, '../../../prompts/adventure.txt'), 'utf8');
+const abridgedPrompt = fs.readFileSync(path.resolve(__dirname, '../../prompts/abridged.txt'), 'utf8');
+const adventurePrompt = fs.readFileSync(path.resolve(__dirname, '../../prompts/adventure.txt'), 'utf8');
 
 const sceneChain = new LLMChain({
   llm,
@@ -477,7 +477,7 @@ router.post('/session/:id/chapter/:index', async (req, res) => {
     }
 
     // Extract state from edited content for downstream pipeline
-    const { extractState } = require('../utils/constraints');
+    const { extractState } = require('../services/validators/ConstraintValidator');
     const extractedState = extractState(content);
 
     // Get chapter ID for revision history
@@ -604,7 +604,7 @@ router.post('/session/:id/recompute/:index', async (req, res) => {
       }, variation.label);
 
       // Update in database with derived_from tracking
-      const { extractState } = require('../utils/constraints');
+      const { extractState } = require('../services/validators/ConstraintValidator');
       const extractedState = extractState(text);
       await updateSceneContent(id, chapterNum, text, branchId, extractedState, startIndex);
       

@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "framework": "vite",
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "https://your-railway-url.up.railway.app/api/$1"
+    }
+  ]
+}
