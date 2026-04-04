@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { extractCharacters, isCharacterDead } from '../utils/highlightParser.js';
+import { extractCharacters, isCharacterDead, extractInventory } from '../utils/highlightParser.js';
 
 /**
  * LiveConstraintChecker - Provides real-time constraint feedback during editing
