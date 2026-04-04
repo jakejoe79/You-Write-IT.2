@@ -19,7 +19,7 @@ function estimateSceneHeight(scene) {
  * Renders 100-500+ scenes efficiently using react-window
  */
 export default function SceneList({ 
-  scenes, 
+  scenes = [], 
   onEdit, 
   onRecompute,
   onScrollToIndex,
@@ -29,7 +29,7 @@ export default function SceneList({
   const [containerHeight, setContainerHeight] = useState(600);
   const [containerWidth, setContainerWidth] = useState(800);
   const userScrolledRef = useRef(false);
-  const prevScenesLengthRef = useRef(scenes.length);
+  const prevScenesLengthRef = useRef(0);
 
   // Measure container dimensions
   useEffect(() => {

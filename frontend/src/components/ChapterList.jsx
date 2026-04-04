@@ -19,7 +19,7 @@ function estimateChapterHeight(chapter) {
  * Replaces SceneList for chapter-based streaming
  */
 export default function ChapterList({ 
-  chapters, 
+  chapters = [], 
   onEdit, 
   onRecompute,
   onScrollToIndex,
@@ -29,7 +29,7 @@ export default function ChapterList({
   const [containerHeight, setContainerHeight] = useState(600);
   const [containerWidth, setContainerWidth] = useState(800);
   const userScrolledRef = useRef(false);
-  const prevChaptersLengthRef = useRef(chapters.length);
+  const prevChaptersLengthRef = useRef(0);
 
   // Measure container dimensions
   useEffect(() => {
